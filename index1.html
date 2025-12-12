@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Random Number Betting - Demo</title>
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --accent:#06b6d4; --muted:#9aa4b2; --glass: rgba(255,255,255,0.03);
+      --win:#16a34a; --lose:#ef4444;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#071024 0%, #081828 100%);color:#e6eef6;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px}
+    .app{width:1100px;max-width:100%;display:grid;grid-template-columns:1fr 380px;gap:20px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:18px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6);}
+    h2{margin:0 0 12px 0;font-size:18px}
+
+    /* top row: numbers */
+    .numbers-row{display:flex;align-items:end;gap:12px;padding:10px 6px}
+    .num-wrap{display:flex;flex-direction:column;align-items:center;width:56px}
+    .percent{font-size:12px;color:var(--muted);margin-bottom:6px}
+    .circle{width:48px;height:48px;border-radius:999px;background:var(--glass);display:flex;align-items:center;justify-content:center;font-weight:700;color:#dbeafe;position:relative;transition:transform .25s, box-shadow .25s}
+    .circle.active{transform:scale(1.18);box-shadow:0 8px 20px rgba(6,182,212,0.14);background:linear-gradient(180deg, rgba(6,182,212,0.12), rgba(255,255,255,0.02))}
+
+    /* pointer triangle under the number area */
+    .pointer-row{height:22px;display:flex;align-items:center;justify-content:flex-start;padding-left:6px}
+    .pointer{width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:12px solid rgba(6,182,212,0.9);opacity:0;transform:translateY(-6px);transition:all .25s}
+    .pointer.visible{opacity:1;transform:translateY(0)}
+
+    /* controls */
+    .controls{display:flex;gap:10px;align-items:center;margin-top:12px}
+    button, input, select{font-family:inherit}
+    .btn{background:var(--accent);border:none;padding:8px 12px;border-radius:8px;color:#012;cursor:pointer;font-weight:600}
+    .btn.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+    .small{padding:6px 8px;font-size:13px}
+
+    /* betting panel */
+    .bet-panel{display:flex;flex-direction:column;gap:12px}
+    label{font-size:13px;color:var(--muted)}
+    input[type=number], select, .stake{padding:8px;border-radius:8px;border:none;background:rgba(255,255,255,0.02);color:inherit}
+    .radio-grid{display:flex;gap:8px;flex-wrap:wrap}
+    .radio-grid button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 10px;border-radius:8px;color:var(--muted);cursor:pointer}
+    .radio-grid button.selected{border-color:var(--accent);color:var(--accent);}
+
+    .status{padding:10px;border-radius:8px;text-align:center}
+    .status.win{background:linear-gradient(90deg, rgba(22,163,74,0.12), rgba(255,255,255,0.01));color:var(--win)}
+    .status.lose{background:linear-gradient(90deg, rgba(239,68,68,0.08), rgba(255,255,255,0.01));color:var(--lose)}
+
+    .history{max-height:200px;overflow:auto;padding:8px;border-radius:8px;background:rgba(255,255,255,0.012)}
+    .row-flex{display:flex;gap:10px;align-items:center}
+    .muted{color:var(--muted)}
+    footer.small{font-size:12px;color:var(--muted);margin-top:8px}
+
+    /* responsive */
+    @media (max-width:980px){.app{grid-template-columns:1fr;}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="card">
+      <h2>Random Number Display</h2>
+      <div id="numbersArea">
+        <div id="percents" class="numbers-row" aria-hidden="true"></div>
+        <div id="circles" class="numbers-row"></div>
+        <div id="pointerRow" class="pointer-row"><div id="pointer" class="pointer"></div></div>
+      </div>
+
+      <div class="controls">
+        <button id="generateBtn" class="btn">Generate Now</button>
+        <button id="autoToggle" class="btn secondary small">Start Auto</button>
+        <label class="muted">Interval (ms): <input id="intervalInput" type="number" value="1500" style="width:100px;margin-left:6px"/></label>
+        <label class="muted">History size: <input id="historySize" type="number" value="50" style="width:80px;margin-left:6px"/></label>
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <div class="muted">Total draws: <span id="totalDraws">0</span></div>
+        <div class="muted">Last number: <strong id="lastNumber">-</strong></div>
+      </div>
+
+      <div style="margin-top:14px">
+        <h2 style="font-size:16px">Result & Outcome</h2>
+        <div id="resultBox" class="status muted">No draw yet</div>
+        <div style="margin-top:8px">
+          <h3 style="margin:6px 0 8px 0;font-size:14px">History</h3>
+          <div id="history" class="history"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="card" style="height:100%">
+      <h2>Betting Panel</h2>
+      <div class="bet-panel">
+        <div>
+          <label>Choose market</label>
+          <div class="radio-grid" id="marketGrid">
+            <button data-market="overUnder" class="selected">Over / Under</button>
+            <button data-market="evenOdd">Even / Odd</button>
+            <button data-market="exact">Exact Number</button>
+          </div>
+        </div>
+
+        <div id="marketDetails">
+          <!-- dynamic market controls injected here -->
+        </div>
+
+        <div>
+          <label>Stake (credits)</label>
+          <input id="stake" class="stake" type="number" min="0" step="1" value="10" />
+        </div>
+
+        <div style="display:flex;gap:8px">
+          <button id="placeBetBtn" class="btn">Place Bet</button>
+          <button id="clearBetBtn" class="btn secondary">Clear Bet</button>
+        </div>
+
+        <div>
+          <h3 style="margin:6px 0 6px 0">Pending Bet</h3>
+          <div id="pendingBet" class="muted">No bet placed. Place a bet — it will be evaluated on the next draw.</div>
+        </div>
+
+        <div>
+          <h3 style="margin:6px 0 6px 0">Payout rules</h3>
+          <div class="muted" style="font-size:13px">Default odds (decimal): Exact number = <strong>9x</strong>. Even/Odd = <strong>1.9x</strong>. Over/Under = calculated by probability × 0.95 house edge.</div>
+        </div>
+
+        <footer class="small">Notes: place a bet, then click "Generate Now" or start Auto. The bet evaluates once on the next generated number.</footer>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ======= State =======
+    const state = {
+      counts: Array.from({length:10},()=>0),
+      total: 0,
+      history: [],
+      historyMax: 50,
+      pendingBet: null, // {market: 'exact'|'evenOdd'|'overUnder', details: {...}, stake: number}
+      autoTimer: null
+    }
+
+    // ======= DOM refs =======
+    const percentsEl = document.getElementById('percents')
+    const circlesEl = document.getElementById('circles')
+    const pointer = document.getElementById('pointer')
+    const generateBtn = document.getElementById('generateBtn')
+    const autoToggle = document.getElementById('autoToggle')
+    const intervalInput = document.getElementById('intervalInput')
+    const historyEl = document.getElementById('history')
+    const totalDrawsEl = document.getElementById('totalDraws')
+    const lastNumberEl = document.getElementById('lastNumber')
+    const resultBox = document.getElementById('resultBox')
+    const marketGrid = document.getElementById('marketGrid')
+    const marketDetails = document.getElementById('marketDetails')
+    const stakeInput = document.getElementById('stake')
+    const placeBetBtn = document.getElementById('placeBetBtn')
+    const pendingBetEl = document.getElementById('pendingBet')
+    const clearBetBtn = document.getElementById('clearBetBtn')
+    const historySizeInput = document.getElementById('historySize')
+
+    // ======= Init UI =======
+    function makeNumberElements(){
+      percentsEl.innerHTML = ''
+      circlesEl.innerHTML = ''
+      for(let i=0;i<10;i++){
+        const pw = document.createElement('div'); pw.className='num-wrap'; pw.dataset.idx = i;
+        const p = document.createElement('div'); p.className='percent'; p.id = 'p-'+i; p.textContent = '0%';
+        const c = document.createElement('div'); c.className='circle'; c.id = 'c-'+i; c.textContent = i;
+        pw.appendChild(p); pw.appendChild(c); circlesEl.appendChild(pw);
+      }
+    }
+
+    makeNumberElements()
+
+    // ======= Rendering =======
+    function updatePercents(){
+      for(let i=0;i<10;i++){
+        const pct = state.total === 0 ? 0 : Math.round((state.counts[i]/state.total)*10000)/100; // two decimals
+        document.getElementById('p-'+i).textContent = pct + '%'
+      }
+    }
+
+    function highlightNumber(n){
+      for(let i=0;i<10;i++){
+        const el = document.getElementById('c-'+i)
+        el.classList.toggle('active', i===n)
+      }
+      // position pointer under the chosen number
+      const target = document.querySelector('.num-wrap[data-idx="'+n+'"]')
+      if(target){
+        const rect = target.getBoundingClientRect()
+        const parentRect = circlesEl.getBoundingClientRect()
+        const left = rect.left - parentRect.left + rect.width/2 - 8
+        pointer.style.marginLeft = left + 'px'
+        pointer.classList.add('visible')
+      }
+    }
+
+    function appendHistory(n){
+      state.history.unshift({n, t: new Date().toLocaleTimeString()})
+      if(state.history.length>state.historyMax) state.history.pop()
+      renderHistory()
+    }
+
+    function renderHistory(){
+      historyEl.innerHTML = ''
+      state.history.forEach(h => {
+        const row = document.createElement('div')
+        row.className='row-flex'
+        row.style.justifyContent='space-between'
+        row.style.padding='6px 8px'
+        row.style.borderBottom='1px solid rgba(255,255,255,0.02)'
+        row.innerHTML = `<div>Number <strong>${h.n}</strong></div><div class="muted">${h.t}</div>`
+        historyEl.appendChild(row)
+      })
+    }
+
+    // ======= Random generator + evaluation =======
+    function getRandom(){
+      // uniform random integer 0..9
+      return Math.floor(Math.random()*10)
+    }
+
+    function registerDraw(n){
+      state.total += 1
+      state.counts[n] += 1
+      totalDrawsEl.textContent = state.total
+      lastNumberEl.textContent = n
+      updatePercents()
+      highlightNumber(n)
+      appendHistory(n)
+
+      // if there is a pending bet evaluate it
+      if(state.pendingBet){
+        evaluateBet(state.pendingBet, n)
+        state.pendingBet = null
+        pendingBetEl.textContent = 'No bet placed. Place a bet — it will be evaluated on the next draw.'
+      }
+    }
+
+    function evaluateBet(bet, n){
+      // returns {win:bool, payout:number, message:string}
+      let win = false, payout = 0, msg = ''
+      const stake = Number(bet.stake) || 0
+      if(bet.market === 'exact'){
+        win = (n === Number(bet.details.number))
+        payout = win ? stake * 9 : 0
+        msg = win ? `Exact match! You win ${payout} credits.` : `No match. You lose your stake (${stake}).`
+      } else if(bet.market === 'evenOdd'){
+        const parity = n%2===0 ? 'even' : 'odd'
+        win = parity === bet.details.choice
+        payout = win ? stake * 1.9 : 0
+        msg = win ? `You guessed ${bet.details.choice}. Number is ${parity}. You win ${payout.toFixed(2)} credits.` : `You guessed ${bet.details.choice}. Number is ${parity}. You lose.`
+      } else if(bet.market === 'overUnder'){
+        const op = bet.details.op; // 'over' or 'under'
+        const threshold = Number(bet.details.threshold)
+        if(op === 'over') win = n > threshold
+        else win = n < threshold
+        // theoretical probability p = count of numbers satisfying / 10
+        const cnt = op==='over' ? (9 - threshold) : (threshold - 0)
+        const prob = Math.max(1, cnt)/10
+        const fairOdds = 1/prob
+        const houseEdge = 0.95
+        const decimalOdds = fairOdds * houseEdge
+        payout = win ? stake * decimalOdds : 0
+        msg = win ? `You win ${payout.toFixed(2)} credits (odds ${decimalOdds.toFixed(2)}x).` : `You lose. Number ${n} ${op==='over'?'is not >':'is not <'} ${threshold}.`
+      }
+
+      // show result box
+      if(win){
+        resultBox.className = 'status win'
+      } else {
+        resultBox.className = 'status lose'
+      }
+      resultBox.textContent = msg
+    }
+
+    // ======= Betting UI logic =======
+    let selectedMarket = 'overUnder'
+    function renderMarketDetails(){
+      marketDetails.innerHTML = ''
+      if(selectedMarket === 'overUnder'){
+        const html = `
+          <label>Over / Under details</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="ouOp"><option value="over">Over</option><option value="under">Under</option></select>
+            <select id="ouThreshold">${Array.from({length:10},(_,i)=>`<option value="${i}">${i}</option>`).join('')}</select>
+          </div>
+        `
+        marketDetails.innerHTML = html
+      } else if(selectedMarket === 'evenOdd'){
+        marketDetails.innerHTML = `
+          <label>Choose parity</label>
+          <div class="radio-grid" style="margin-top:6px">
+            <button data-choice="even" id="btnEven">Even</button>
+            <button data-choice="odd" id="btnOdd">Odd</button>
+          </div>
+        `
+        // set default
+        setTimeout(()=>{ document.getElementById('btnEven').classList.add('selected') },0)
+      } else if(selectedMarket === 'exact'){
+        marketDetails.innerHTML = `
+          <label>Pick exact number</label>
+          <select id="exactNumber">${Array.from({length:10},(_,i)=>`<option value="${i}">${i}</option>`).join('')}</select>
+        `
+      }
+    }
+
+    renderMarketDetails()
+
+    // market selection buttons
+    marketGrid.querySelectorAll('button').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        marketGrid.querySelectorAll('button').forEach(b=>b.classList.remove('selected'))
+        btn.classList.add('selected')
+        selectedMarket = btn.dataset.market
+        renderMarketDetails()
+      })
+    })
+
+    placeBetBtn.addEventListener('click', ()=>{
+      const stake = Number(stakeInput.value) || 0
+      if(stake <= 0){ alert('Enter a stake greater than 0'); return }
+      const bet = {market:selectedMarket, stake, details:{}}
+      if(selectedMarket === 'overUnder'){
+        const op = document.getElementById('ouOp').value
+        const threshold = document.getElementById('ouThreshold').value
+        bet.details = {op, threshold}
+      } else if(selectedMarket === 'evenOdd'){
+        const evenBtn = document.getElementById('btnEven')
+        const oddBtn = document.getElementById('btnOdd')
+        // read selected
+        let choice = 'even'
+        if(oddBtn && oddBtn.classList.contains('selected')) choice = 'odd'
+        else if(evenBtn && evenBtn.classList.contains('selected')) choice = 'even'
+        bet.details = {choice}
+      } else if(selectedMarket === 'exact'){
+        const num = document.getElementById('exactNumber').value
+        bet.details = {number:num}
+      }
+      state.pendingBet = bet
+      pendingBetEl.innerHTML = `<div>Market: <strong>${bet.market}</strong></div><div>Details: <strong>${JSON.stringify(bet.details)}</strong></div><div>Stake: <strong>${bet.stake}</strong></div>`
+    })
+
+    clearBetBtn.addEventListener('click', ()=>{
+      state.pendingBet = null
+      pendingBetEl.textContent = 'No bet placed. Place a bet — it will be evaluated on the next draw.'
+    })
+
+    // parity buttons handler (delegation)
+    marketDetails.addEventListener('click', (e)=>{
+      if(e.target && e.target.dataset.choice){
+        marketDetails.querySelectorAll('button').forEach(b=>b.classList.remove('selected'))
+        e.target.classList.add('selected')
+      }
+    })
+
+    // ======= Controls: generate / auto =======
+    generateBtn.addEventListener('click', ()=>{ const n=getRandom(); registerDraw(n) })
+
+    autoToggle.addEventListener('click', ()=>{
+      if(state.autoTimer){ stopAuto() } else { startAuto() }
+    })
+
+    function startAuto(){
+      const ms = Math.max(200, Number(intervalInput.value) || 1500)
+      state.autoTimer = setInterval(()=>{ const n=getRandom(); registerDraw(n) }, ms)
+      autoToggle.textContent = 'Stop Auto'
+      autoToggle.classList.remove('secondary')
+    }
+    function stopAuto(){ clearInterval(state.autoTimer); state.autoTimer = null; autoToggle.textContent = 'Start Auto'; autoToggle.classList.add('secondary') }
+
+    intervalInput.addEventListener('change', ()=>{
+      if(state.autoTimer){ stopAuto(); startAuto() }
+    })
+
+    historySizeInput.addEventListener('change', ()=>{
+      const v = Number(historySizeInput.value) || 50
+      state.historyMax = Math.max(5, v)
+      if(state.history.length>state.historyMax) state.history = state.history.slice(0,state.historyMax)
+      renderHistory()
+    })
+
+    // ======= initial render =======
+    updatePercents()
+    renderHistory()
+
+    // expose some helpers for debugging in console
+    window._appState = state
+    window._generate = ()=>{ const n=getRandom(); registerDraw(n) }
+  </script>
+</body>
+</html>
